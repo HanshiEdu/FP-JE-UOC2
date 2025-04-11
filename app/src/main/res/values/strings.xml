@@ -1,0 +1,14 @@
+<resources>
+
+    <string name="app_name">Morra Virtual</string>
+    <string name="welcome">Pantalla de Bienvenida</string>
+    <string name="clic_welcome">Haz Clik para continuar...</string>
+    <string name="iniciar_juego">INICIAR JUEGO.</string>
+    <string name="nueva_oartida">NUEVA PARTIDA.</string>
+    <string name="final_oartida">GAME OVER.</string>
+    <string name="nueva_apuesta">APOSTAR.</string>
+    <string name="ganador">El ganador es: %s</string>
+    <string name="salir_partida">SALIR DE LA PARTIDA.</string>
+
+
+</resources>
