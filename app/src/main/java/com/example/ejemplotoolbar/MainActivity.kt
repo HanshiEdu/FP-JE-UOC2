@@ -157,7 +157,7 @@ fun MorraScreen(
             modifier = Modifier.fillMaxSize()
         ){
 
-            Spacer(modifier = Modifier.height(550.dp))
+            Spacer(modifier = Modifier.height(540.dp))
             Button( onClick = onImageClick,
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier
