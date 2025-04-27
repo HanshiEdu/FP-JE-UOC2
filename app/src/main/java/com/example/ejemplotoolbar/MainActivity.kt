@@ -5,12 +5,12 @@ package com.example.ejemplotoolbar
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
-
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.RequiresApi
@@ -30,7 +30,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -49,14 +58,17 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
+import com.example.ejemplotoolbar.data.DataPartida
+import com.example.ejemplotoolbar.data.UltimaFila
+import com.example.ejemplotoolbar.data.guardarPartida
 import com.example.ejemplotoolbar.ui.theme.EjemploToolbarTheme
-import java.time.LocalDateTime
-import kotlin.Int
-import com.example.ejemplotoolbar.data.*
-import io.reactivex.rxjava3.schedulers.Schedulers
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
-import io.reactivex.rxjava3.core.Scheduler
 import io.reactivex.rxjava3.disposables.CompositeDisposable
+import io.reactivex.rxjava3.schedulers.Schedulers
+import java.io.IOException
+import java.time.LocalDateTime
+import android.media.SoundPool
 
 data class Jugador(
     val title: String,
@@ -66,6 +78,8 @@ data class Jugador(
 )
 
 class MainActivity : ComponentActivity() {
+    private lateinit var mediaPlayer: MediaPlayer
+
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,9 +89,37 @@ class MainActivity : ComponentActivity() {
               MorraVirtualApp(nombre)
             }
         }
-    }
-}
+        // Inicializa el MediaPlayer
+        mediaPlayer = MediaPlayer()
 
+        // Ruta del archivo de música
+        val musicPath = "android.resource://" + packageName + "/" + R.raw.jazz_in_paris
+
+
+        try {
+            mediaPlayer.setDataSource(this, musicPath.toUri())
+            mediaPlayer.prepare()
+
+
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
+        mediaPlayer.start()
+
+    }
+    override fun onPause() {
+        super.onPause()
+        mediaPlayer.stop()
+        mediaPlayer.release()
+
+    }
+   override fun onDestroy() {
+        super.onDestroy()
+        mediaPlayer.release()
+
+    }
+
+}
 @SuppressLint("CheckResult")
 @RequiresApi(Build.VERSION_CODES.O)
 fun IniciarDatos(context: Context): Jugador{
@@ -90,6 +132,14 @@ fun IniciarDatos(context: Context): Jugador{
 fun MorraVirtualApp (jugador: Jugador) {
     var currentStep by remember { mutableIntStateOf(1) }
     var ganador by remember { mutableStateOf("") }
+    val soundPool = rememberSoundPool()
+    val soundPool2 = rememberSoundPool()
+
+    val context = LocalContext.current
+    val soundId = remember { soundPool.load(context, R.raw.button, 1) }
+    val soundId2 = remember { soundPool2.load(context, R.raw.winner, 1) }
+    val loaded = remember { mutableStateOf(false) }
+
     Surface(
         modifier = Modifier
             .fillMaxSize(),
@@ -111,16 +161,23 @@ fun MorraVirtualApp (jugador: Jugador) {
                 InterfaceUsuario(jugador,
                     imageResourceId = R.drawable.lamorratheme,
                     contentDescriptionId = R.string.welcome,
-                    onImageClick = {currentStep = 3}
+                    onImageClick = {
+                        currentStep = 3
+                        soundPool.play(soundId, 1f, 1f, 0, 0, 1f)
+                        }
                 )
             }
             3 -> {
                 InterfaceJuego(jugador,
                     imageResourceId = R.drawable.lamorratheme,
                     contentDescriptionId = R.string.welcome,
-                    onImageClick = {currentStep = 4},
+                    onImageClick = {
+                        currentStep = 4
+                        soundPool.play(soundId, 1f, 1f, 0, 0, 1f)},
                     ganador = ganador,
-                    onWinnerChange = {ganador = it}
+                    onWinnerChange = {
+                        ganador = it
+                        soundPool.play(soundId, 1f, 1f, 0, 0, 1f)}
                 )
 
             }
@@ -128,7 +185,9 @@ fun MorraVirtualApp (jugador: Jugador) {
                 PantallaFinal(jugador,
                     imageResourceId = R.drawable.lamorratheme,
                     contentDescriptionId = R.string.welcome,
-                    onImageClick = {currentStep = 2},
+                    onImageClick = {
+                        currentStep = 2
+                        soundPool2.play(soundId2, 1f, 1f, 0, 0, 1f)},
                     ganador = ganador
                 )
             }
@@ -293,6 +352,11 @@ fun InterfaceJuego(jugador: Jugador,
                     var resta2 by remember  { mutableIntStateOf(value = 0) }
                     var gana by remember {mutableStateOf(value = "")}
                     val disposable = CompositeDisposable()
+                    val soundPool = rememberSoundPool()
+
+                    val soundId = remember { soundPool.load(context, R.raw.button, 1) }
+
+                    val loaded = remember { mutableStateOf(false) }
                     Column(
                         modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.Top,
@@ -304,6 +368,7 @@ fun InterfaceJuego(jugador: Jugador,
                         Button(
 
                             onClick = {
+                                soundPool.play(soundId, 1f, 1f, 0, 0, 1f)
                                 mano0 = mano1.toInt()
                                 // comprueba si la apuesta es valida
                                 if( 0 <= mano0 && mano0 <= 5 && mano0 <= total1.toInt() && total1.toInt() <= mano0 + 5) {
@@ -642,4 +707,18 @@ fun positivoConv (a: Int): Int{
         return a * (-1)
     }else
         return a
+}
+@Composable
+fun rememberSoundPool(): SoundPool {
+    val context = LocalContext.current
+    return remember {
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        SoundPool.Builder()
+            .setMaxStreams(1)
+            .setAudioAttributes(audioAttributes)
+            .build()
+    }
 }
