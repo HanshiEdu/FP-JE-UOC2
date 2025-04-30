@@ -3,8 +3,17 @@
 package com.example.ejemplotoolbar
 
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.ContentValues
 import android.content.Context
+import android.content.pm.PackageManager
+import android.database.sqlite.SQLiteDatabase
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.icu.util.Calendar
+import android.icu.util.TimeZone
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.os.Build
@@ -69,6 +78,18 @@ import io.reactivex.rxjava3.schedulers.Schedulers
 import java.io.IOException
 import java.time.LocalDateTime
 import android.media.SoundPool
+import android.os.Environment
+import android.provider.CalendarContract
+import android.provider.MediaStore
+import androidx.activity.compose.LocalActivity
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.delay
 
 data class Jugador(
     val title: String,
@@ -272,224 +293,461 @@ fun InterfaceUsuario(jugador: Jugador,
         }
     )
 }
+
+class CaptureController {
+    var bitmap: Bitmap? by mutableStateOf(null)
+    var requestCapture by mutableStateOf(false)
+
+    fun capture() {
+        requestCapture = true
+    }
+}
+
+
+@Composable
+fun CaptureComposable(
+    captureController: CaptureController,
+    onCaptured: (Bitmap) -> Unit,
+    content: @Composable () -> Unit
+) {
+    Log.d("CaptureDebug", "entro en captureComposable")
+
+    AndroidView(
+        factory = { context ->
+            ComposeView(context).apply {
+                setContent {
+                    content()
+                }
+            }
+
+        },
+        update = { view ->
+            if (captureController.requestCapture) {
+                view.post {
+                    val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(bitmap)
+                    view.draw(canvas)
+                    Log.d("CaptureDebug", "Imagen capturada, tamaño: ${bitmap.width}x${bitmap.height}")
+                    captureController.bitmap = bitmap
+                    captureController.requestCapture = false
+                    onCaptured(bitmap)
+                }
+            }else{
+                Log.d("CaptureDebug", "entro en el else")
+            }
+        },
+        modifier = Modifier.fillMaxSize()
+    )
+
+}
+
+
+
 @Composable
 fun InterfaceJuego(jugador: Jugador,
-    imageResourceId: Int,
-    contentDescriptionId: Int,
-    onImageClick: () -> Unit,
+                    imageResourceId: Int,
+                    contentDescriptionId: Int,
+                    onImageClick: () -> Unit,
                    ganador: String,
                    onWinnerChange: (String) -> Unit,
-    modifier: Modifier = Modifier){
-    Scaffold(
-        topBar = { Toolbar(jugador)},
+                   modifier: Modifier = Modifier,
+                   onCapturaLista: (Bitmap) -> Unit ={}
+){
+    val context = LocalContext.current
+    val dbHelper = DataPartida(context)
+    var db = dbHelper.writableDatabase
+    val activity = LocalActivity.current
 
-        content = { innerPadding ->
+    val captureController = remember { CaptureController() }
+    var mostrarPantallaFinal by remember { mutableStateOf(false) }
+    var capturaPendiente by remember { mutableStateOf(false) }
+    var mostrarElegirCalendario by remember { mutableStateOf(false) }
+    var calendarIdSeleccionado by remember { mutableStateOf<Long?>(null) }
+    // Activa el estado de captura antes de mostrar la pantalla final
+    // Componente de captura
+    CaptureComposable(
+        captureController = captureController,
+        onCaptured = { bitmap ->
+            guardarImagenEnGaleria(context, bitmap)
+            Toast.makeText(context, "Imagen guardada en galería", Toast.LENGTH_SHORT).show()
+            onCapturaLista(bitmap)
+        }
+    ) {
+        Scaffold(
+            topBar = { Toolbar(jugador)},
+
+            content = { innerPadding ->
 
 
 
-            Box(modifier) {
-                Image(
-                    painter = painterResource(imageResourceId),
-                    contentDescription = stringResource(contentDescriptionId),
-                    contentScale = ContentScale.Crop
-                )
-                Column(
-                    verticalArrangement = Arrangement.Top,
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                ) {
-
-                    // inicio partida, puntos a 0
-                    var puntos1 by remember{mutableIntStateOf(value = 0)}
-                    var puntos2 by remember{mutableIntStateOf(value = 0) }
-                    Row(
-                        modifier = modifier
-                            .fillMaxWidth()
-                            .padding(15.dp),
-                        verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.SpaceEvenly
+                Box(modifier) {
+                    Image(
+                        painter = painterResource(imageResourceId),
+                        contentDescription = stringResource(contentDescriptionId),
+                        contentScale = ContentScale.Crop
                     )
-                    {
-                        val nombre = jugador.title
-                        Text(text= "Contrincantes: ",
-                            fontSize = (24.sp),
-                            fontWeight = FontWeight.Bold)
-                        Column {
-
-                            Text(nombre,
-                                fontSize = (24.sp),
-                                fontWeight = FontWeight.Bold)
-                            Text("$puntos1 Puntos",
-                                fontSize = (24.sp),
-                                fontWeight = FontWeight.Bold)
-
-                        }
-                        Column {
-
-                            Text("Maquina",
-                                fontSize = (24.sp),
-                                fontWeight = FontWeight.Bold)
-                            Text("${puntos2 }Puntos",
-                                fontSize = (24.sp),
-                                fontWeight = FontWeight.Bold)
-
-                        }
-                    }
-
-                    val context = LocalContext.current
-                    val dbHelper = DataPartida(context)
-                    var db = dbHelper.writableDatabase
-                    var mano1 by remember{mutableStateOf(value ="")}
-                    var mano0 by remember{mutableIntStateOf(value = 0)}
-                    var mano2 by remember{mutableIntStateOf(value = 0) }
-                    var total1 by remember { mutableStateOf(value = "") }
-                    var total2 by remember{mutableIntStateOf(value = 0)}
-                    var suma1 by remember { mutableIntStateOf(value = 0) }
-                    var maxtotal by remember  { mutableIntStateOf(value = 0) }
-                    var resta1 by remember  { mutableIntStateOf(value = 0) }
-                    var resta2 by remember  { mutableIntStateOf(value = 0) }
-                    var gana by remember {mutableStateOf(value = "")}
-                    val disposable = CompositeDisposable()
-                    val soundPool = rememberSoundPool()
-
-                    val soundId = remember { soundPool.load(context, R.raw.button, 1) }
-
-                    val loaded = remember { mutableStateOf(false) }
                     Column(
-                        modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.Top,
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
                     ) {
-                        EntradaDeDatos(title = "Tu Mano: (del 0 al 5) ", text = mano1, onValueChange = {mano1 = it} )
-                        EntradaDeDatos(title = "Tu Apuesta: (del 0 al 10)", text = total1, onValueChange = {total1 = it} )
-                        Spacer(modifier = Modifier.height(50.dp))
-                        Button(
-
-                            onClick = {
-                                soundPool.play(soundId, 1f, 1f, 0, 0, 1f)
-                                mano0 = mano1.toInt()
-                                // comprueba si la apuesta es valida
-                                if( 0 <= mano0 && mano0 <= 5 && mano0 <= total1.toInt() && total1.toInt() <= mano0 + 5) {
-                                    mano2 = (0..5).random()
-                                    maxtotal = mano2 + 5
-                                    total2 = (mano2..maxtotal).random()
-                                    suma1 = mano0 + mano2
-                                    resta1 = positivoConv(suma1 - total1.toInt())
-                                    resta2 = positivoConv(suma1 - total2)
-                                    // revisa la solución de la apuesta
-                                    if (total1.toInt() != total2) {
-                                        if (total1.toInt() == suma1) {
-                                            puntos1 += 5
-                                            gana = "jugador"
-                                            jugador.monedas += 5
-                                        } else if (total2 == suma1) {
-                                            puntos2 += 5
-                                            gana = "maquina"
-                                            jugador.monedas -= 5
-                                        } else if (resta1 < resta2) {
-                                            puntos1 += 1
-                                            gana = "jugador"
-                                            jugador.monedas += 1
-                                        } else {
-                                            puntos2 += 1
-                                            gana = "maquina"
-                                            jugador.monedas -= 1
-                                        }
-
-                                    }else{
-                                        Toast.makeText(context, "Tablas, no hay vencedor", Toast.LENGTH_SHORT).show()
-                                    }
-                                    if (puntos1 >= 5) {
-                                        // racha + 1
-                                        jugador.rachas += 1
-                                        Toast.makeText(context, "fin de la partida ganador jugador", Toast.LENGTH_SHORT).show()
-                                        disposable.add( guardarPartida(db ,jugador.title , jugador.monedas, jugador.rachas)
-                                            .subscribeOn(Schedulers.io())
-                                            .observeOn(AndroidSchedulers.mainThread())
-                                            .subscribe(
-                                                { rowId -> Log.d("DB", "Insertado con ID: $rowId") },
-                                                { error -> Log.e("DB", "error", error)}
-                                            )
-                                        )
-
-                                        // guardo la partida
-                                        onWinnerChange.invoke("Jugador")
-                                        onImageClick.invoke()
-                                    } else if (puntos2 >= 5) {
-                                        // se acabo la racha
-                                        jugador.rachas = 0
-                                        Toast.makeText(context, "fin de la partida ganadora la maquina", Toast.LENGTH_SHORT).show()
-                                        // guardo la partida
-                                        disposable.add( guardarPartida(db ,jugador.title , jugador.monedas, jugador.rachas)
-                                            .subscribeOn(Schedulers.io())
-                                            .observeOn(AndroidSchedulers.mainThread())
-                                            .subscribe(
-                                                { rowId -> Log.d("DB", "Insertado con ID: $rowId") },
-                                                { error -> Log.e("DB", "error", error)}
-                                            )
-                                        )
-                                        onWinnerChange("Maquina")
-                                        onImageClick.invoke()
-                                    }
-                                }else{
-
-                                    Toast.makeText(context, "Error en la apuesta, recuerda tu mano tiene de 0 a 5 dedos y tu apuesta el numero de tu apuesta hasta + 5", Toast.LENGTH_SHORT).show()
+                        if (mostrarElegirCalendario) {
+                            ElegirCalendario (
+                                onDismiss = { mostrarElegirCalendario = false },
+                                onCalendarioSeleccionado = { calendarioId ->
+                                    agregarVictoriaCalendario(context, calendarioId)
+                                    mostrarElegirCalendario = false
+                                    mostrarPantallaFinal = true
+                                    capturaPendiente = true
                                 }
-                            },
-                        ) {
-
-                            Text(
-                                text = stringResource(R.string.nueva_apuesta),
-                                fontSize = (24.sp),
-                                fontWeight = FontWeight.Bold
-
                             )
                         }
-                        Text(text = "Apuesta del oponente $total2",
-                            fontSize = (24.sp),
-                            fontWeight = FontWeight.Bold)
-                        Row (modifier = modifier
-                            .fillMaxWidth()
-                            .padding(15.dp),
+                        // inicio partida, puntos a 0
+                        var puntos1 by remember{mutableIntStateOf(value = 0)}
+                        var puntos2 by remember{mutableIntStateOf(value = 0) }
+                        Row(
+                            modifier = modifier
+                                .fillMaxWidth()
+                                .padding(15.dp),
                             verticalAlignment = Alignment.Top,
-                            horizontalArrangement = Arrangement.SpaceEvenly)
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        )
                         {
-                            ImagenMano(mano0)
-                            ImagenMano(mano2)
-                        }
-                        Button(
-                            onClick = onImageClick,
-                            modifier = Modifier.height(70.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.salir_partida),
+                            val nombre = jugador.title
+                            Text(text= "Contrincantes: ",
                                 fontSize = (24.sp),
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold)
+                            Column {
 
-                            )
+                                Text(nombre,
+                                    fontSize = (24.sp),
+                                    fontWeight = FontWeight.Bold)
+                                Text("$puntos1 Puntos",
+                                    fontSize = (24.sp),
+                                    fontWeight = FontWeight.Bold)
+
+                            }
+                            Column {
+
+                                Text("Maquina",
+                                    fontSize = (24.sp),
+                                    fontWeight = FontWeight.Bold)
+                                Text("${puntos2 }Puntos",
+                                    fontSize = (24.sp),
+                                    fontWeight = FontWeight.Bold)
+
+                            }
                         }
 
+                        val context = LocalContext.current
+                        val dbHelper = DataPartida(context)
+                        var db = dbHelper.writableDatabase
+                        var mano1 by remember{mutableStateOf(value ="")}
+                        var mano0 by remember{mutableIntStateOf(value = 0)}
+                        var mano2 by remember{mutableIntStateOf(value = 0) }
+                        var total1 by remember { mutableStateOf(value = "") }
+                        var total2 by remember{mutableIntStateOf(value = 0)}
+                        var suma1 by remember { mutableIntStateOf(value = 0) }
+                        var maxtotal by remember  { mutableIntStateOf(value = 0) }
+                        var resta1 by remember  { mutableIntStateOf(value = 0) }
+                        var resta2 by remember  { mutableIntStateOf(value = 0) }
+                        var gana by remember {mutableStateOf(value = "")}
+                        val disposable = CompositeDisposable()
+                        val soundPool = rememberSoundPool()
+
+                        val soundId = remember { soundPool.load(context, R.raw.button, 1) }
+
+                        val loaded = remember { mutableStateOf(false) }
+                        Column(
+                            modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.Top,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            EntradaDeDatos(title = "Tu Mano: (del 0 al 5) ", text = mano1, onValueChange = {mano1 = it} )
+                            EntradaDeDatos(title = "Tu Apuesta: (del 0 al 10)", text = total1, onValueChange = {total1 = it} )
+                            Spacer(modifier = Modifier.height(50.dp))
+                            Button(
+
+                                onClick = {
+                                    soundPool.play(soundId, 1f, 1f, 0, 0, 1f)
+                                    mano0 = mano1.toInt()
+                                    // comprueba si la apuesta es valida
+                                    if( 0 <= mano0 && mano0 <= 5 && mano0 <= total1.toInt() && total1.toInt() <= mano0 + 5) {
+                                        mano2 = (0..5).random()
+                                        maxtotal = mano2 + 5
+                                        total2 = (mano2..maxtotal).random()
+                                        suma1 = mano0 + mano2
+                                        resta1 = positivoConv(suma1 - total1.toInt())
+                                        resta2 = positivoConv(suma1 - total2)
+                                        // revisa la solución de la apuesta
+                                        if (total1.toInt() != total2) {
+                                            if (total1.toInt() == suma1) {
+                                                puntos1 += 5
+                                                gana = "jugador"
+                                                jugador.monedas += 5
+                                            } else if (total2 == suma1) {
+                                                puntos2 += 5
+                                                gana = "maquina"
+                                                jugador.monedas -= 5
+                                            } else if (resta1 < resta2) {
+                                                puntos1 += 1
+                                                gana = "jugador"
+                                                jugador.monedas += 1
+                                            } else {
+                                                puntos2 += 1
+                                                gana = "maquina"
+                                                jugador.monedas -= 1
+                                            }
+
+                                        }else{
+                                            Toast.makeText(context, "Tablas, no hay vencedor", Toast.LENGTH_SHORT).show()
+                                        }
+                                        if (puntos1 >= 5) {
+                                            // racha + 1
+                                            jugador.rachas += 1
+                                            Toast.makeText(context, "fin de la partida ganador jugador", Toast.LENGTH_SHORT).show()
+                                            guardaPartidaDB(db ,jugador.title , jugador.monedas, jugador.rachas)
+                                            if(activity != null) {
+                                                captureController.capture()
+                                                solicitarPermisosCalendario(activity)
+                                                mostrarElegirCalendario = true
+                                            }
+                                        } else if (puntos2 >= 5) {
+                                            // se acabo la racha
+                                            jugador.rachas = 0
+                                            Toast.makeText(context, "fin de la partida ganadora la maquina", Toast.LENGTH_SHORT).show()
+                                            // guardo la partida
+                                            guardaPartidaDB(db ,jugador.title , jugador.monedas, jugador.rachas)
+
+                                            onWinnerChange("Maquina")
+                                            onImageClick.invoke()
+                                        }
+                                    }else{
+
+                                        Toast.makeText(context, "Error en la apuesta, recuerda tu mano tiene de 0 a 5 dedos y tu apuesta el numero de tu apuesta hasta + 5", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                            ) {
+
+                                Text(
+                                    text = stringResource(R.string.nueva_apuesta),
+                                    fontSize = (24.sp),
+                                    fontWeight = FontWeight.Bold
+
+                                )
+                            }
+                            Text(text = "Apuesta del oponente $total2",
+                                fontSize = (24.sp),
+                                fontWeight = FontWeight.Bold)
+                            Row (modifier = modifier
+                                .fillMaxWidth()
+                                .padding(15.dp),
+                                verticalAlignment = Alignment.Top,
+                                horizontalArrangement = Arrangement.SpaceEvenly)
+                            {
+                                ImagenMano(mano0)
+                                ImagenMano(mano2)
+                            }
+                            Button(
+                                onClick = onImageClick,
+                                modifier = Modifier.height(70.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.salir_partida),
+                                    fontSize = (24.sp),
+                                    fontWeight = FontWeight.Bold
+
+                                )
+                            }
+
+                        }
                     }
                 }
+            }
+        )
+    }
+
+    // Llamamos a capture después de que se renderiza la UI
+    LaunchedEffect(capturaPendiente) {
+        if (capturaPendiente) {
+            delay(300) // Espera un frame para la renderización
+            // Realiza la captura
+            captureController.capture()
+            // Llamada final a la UI
+            onWinnerChange.invoke("Jugador")
+            onImageClick.invoke()
+        }
+    }
+}
+
+
+
+data class CalendarioDisponible(
+    val id: Long,
+    val nombre: String,
+    val cuenta: String
+)
+
+fun obtenerCalendarios(context: Context): List<CalendarioDisponible> {
+    val calendarios = mutableListOf<CalendarioDisponible>()
+
+    val projection = arrayOf(
+        CalendarContract.Calendars._ID,
+        CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
+        CalendarContract.Calendars.ACCOUNT_NAME
+    )
+
+    val cursor = context.contentResolver.query(
+        CalendarContract.Calendars.CONTENT_URI,
+        projection,
+        null,
+        null,
+        null
+    )
+
+    cursor?.use {
+        val idIndex = it.getColumnIndex(CalendarContract.Calendars._ID)
+        val nameIndex = it.getColumnIndex(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME)
+        val accountIndex = it.getColumnIndex(CalendarContract.Calendars.ACCOUNT_NAME)
+
+        while (it.moveToNext()) {
+            val id = it.getLong(idIndex)
+            val nombre = it.getString(nameIndex)
+            val cuenta = it.getString(accountIndex)
+
+            Log.d("CalendarioDebug", "Calendario encontrado: Nombre=$nombre, Cuenta=$cuenta, ID=$id")
+
+            calendarios.add(CalendarioDisponible(id, nombre, cuenta))
+        }
+    }
+
+    return calendarios
+}
+
+@Composable
+fun ElegirCalendario(
+    onDismiss: () -> Unit,
+    onCalendarioSeleccionado: (Long) -> Unit
+) {
+    val context = LocalContext.current
+    val calendarios = remember { obtenerCalendarios(context).filter { calendario ->
+        calendario.cuenta.contains("@uoc.edu")
+    } }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {Text("Selecciona un calendario")},
+        text= {
+            Column {
+                calendarios.forEach { calendario ->
+                    Button(
+                        onClick = {
+                            onCalendarioSeleccionado(calendario.id)
+                            onDismiss()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Text(calendario.nombre)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar")
             }
         }
     )
 }
 
-/*fun guardaPartidaDB(nombre: String, monedas: Int, rachas: Int){
-    context
-    val idPartida = guardarPartida(context = Context, dataPartida, nombre, monedas, rachas)
-    if (idPartida != null) {
-        if (idPartida > 0) {
-            println("Partida guardada con ID: $idPartida")
-        } else {
-            println("Error al guardar la partida")
-        }
+fun solicitarPermisosCalendario(activity: Activity) {
+    if (ContextCompat.checkSelfPermission(activity, android.Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(activity, android.Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+
+        ActivityCompat.requestPermissions(
+            activity,
+            arrayOf(
+                android.Manifest.permission.WRITE_CALENDAR,
+                Manifest.permission.READ_CALENDAR
+            ),
+            100 // código de solicitud
+        )
     }
 }
-*/
+
+fun agregarVictoriaCalendario(context: Context, calendarId: Long,titulo: String = "¡Victoria en el juego!", descripcion: String = "Ganaste una partida") {
+    // val calendarId = obtenerPrimerCalendarioId(context) ?: return
+
+    Log.d("CaptureDebug", "Estas en la funcion agregarvictoriacalendario")
+    val inicio = Calendar.getInstance()
+    val fin = Calendar.getInstance().apply{add(Calendar.HOUR, 1)}
+    //fin.add(Calendar.HOUR, 1) // duración de 1 hora
+
+    val values = ContentValues().apply {
+        put(CalendarContract.Events.DTSTART, inicio.timeInMillis)
+        put(CalendarContract.Events.DTEND, fin.timeInMillis)
+        put(CalendarContract.Events.TITLE, titulo)
+        put(CalendarContract.Events.DESCRIPTION, descripcion)
+        put(CalendarContract.Events.CALENDAR_ID, calendarId)
+        put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+    }
+
+    try {
+        val uri = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
+        if (uri != null) {
+            Log.d("CALENDARIO", "Evento cuardado correctamente: $uri")
+            Log.d("CaptureDebug", "Insertando evento en calendario ID: $calendarId")
+        }else{
+            Log.d("CALENDARIO", "Error al guardar el evento")
+        }
+    }catch ( e: SecurityException){
+        Log.e("CaptureDebug", "Error de permisos al guardar evento: ${e.message}")
+    }catch (e: Exception) {
+        Log.e("CaptureDebug", "Error desconocido al guardar evento: ${e.message}")
+    }
+}
+
+
+fun guardaPartidaDB(dbpartida: SQLiteDatabase, nombre: String, monedas: Int, rachas: Int){
+
+    val disposable = CompositeDisposable()
+    disposable.add( guardarPartida(dbpartida ,nombre , monedas, rachas)
+        .subscribeOn(Schedulers.io())
+        .observeOn(AndroidSchedulers.mainThread())
+        .subscribe(
+            { rowId -> Log.d("DB", "Insertado con ID: $rowId") },
+            { error -> Log.e("DB", "error", error)}
+        )
+    )
+}
+
+fun guardarImagenEnGaleria(context: Context, bitmap: Bitmap) {
+    val filename = "victoria_${System.currentTimeMillis()}.jpg"
+    val contentValues = ContentValues().apply {
+        put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+        put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+        put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Morra")
+        put(MediaStore.Images.Media.IS_PENDING, 1)
+    }
+    val resolver = context.contentResolver
+    val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+
+    uri?.let {
+        resolver.openOutputStream(it)?.use { outputStream ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+        }
+
+        contentValues.clear()
+        contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
+        resolver.update(uri, contentValues, null, null)
+    }
+
+}
+
 
 @Composable
 fun ImagenMano(a: Int){

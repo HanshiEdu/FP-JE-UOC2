@@ -65,16 +65,6 @@ public fun guardarPartida(
         }
         db.insert(PartidaReaderEntry.PartidaEntry.TABLE_NAME, null, values)
     }
-    /*
-    val dbHelper = DataPartida(context)
-    val values = ContentValues().apply {
-        put(PartidaReaderEntry.PartidaEntry.COLUMN_NAME_NOMBRE, nombre)
-        put(PartidaReaderEntry.PartidaEntry.COLUMN_NAME_MONEDAS, monedas)
-        put(PartidaReaderEntry.PartidaEntry.COLUMN_NAME_RACHAS, rachas)
-    }
-    val newRowId = db.insert(PartidaReaderEntry.PartidaEntry.TABLE_NAME, null, values)
-    return newRowId
-    dbHelper.close()*/
 }
 
 @SuppressLint("Range")
