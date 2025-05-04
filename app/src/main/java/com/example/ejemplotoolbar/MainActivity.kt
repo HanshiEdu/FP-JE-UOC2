@@ -81,10 +81,20 @@ import android.media.SoundPool
 import android.os.Environment
 import android.provider.CalendarContract
 import android.provider.MediaStore
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.ActivityCompat
@@ -97,6 +107,13 @@ data class Jugador(
     var rachas: Int,
     var fecha: LocalDateTime? = null
 )
+
+data class ToolbarActions(
+    val onHelp: () -> Unit = {},
+    val onHome: () -> Unit = {}
+)
+
+val LocalToolbarActions = compositionLocalOf { ToolbarActions() }
 
 class MainActivity : ComponentActivity() {
     private lateinit var mediaPlayer: MediaPlayer
@@ -160,60 +177,71 @@ fun MorraVirtualApp (jugador: Jugador) {
     val soundId = remember { soundPool.load(context, R.raw.button, 1) }
     val soundId2 = remember { soundPool2.load(context, R.raw.winner, 1) }
     val loaded = remember { mutableStateOf(false) }
-
-    Surface(
+    ConAyudaOverlay {
+        Surface(
         modifier = Modifier
             .fillMaxSize(),
         color = MaterialTheme.colorScheme.background
-    ){
-        when (currentStep) {
-            1 -> {
-                MorraScreen(
-                    imageResourceId = R.drawable.lamorravirtual,
-                    contentDescriptionId = R.string.welcome,
-                    onImageClick = {currentStep = 2},
+        ) {
 
-                    )
+            when (currentStep) {
+
+                1 -> {
+
+                    MorraScreen(
+                        imageResourceId = R.drawable.lamorravirtual,
+                        contentDescriptionId = R.string.welcome,
+                        onImageClick = { currentStep = 2 },
+                        )
+                }
 
 
-            }
-            2 -> {
+                2 -> {
                 //Thread.sleep(3000)
-                InterfaceUsuario(jugador,
-                    imageResourceId = R.drawable.lamorratheme,
-                    contentDescriptionId = R.string.welcome,
-                    onImageClick = {
+
+                    InterfaceUsuario(
+                        jugador,
+                        imageResourceId = R.drawable.lamorratheme,
+                        contentDescriptionId = R.string.welcome,
+                        onImageClick = {
                         currentStep = 3
                         soundPool.play(soundId, 1f, 1f, 0, 0, 1f)
                         }
-                )
-            }
-            3 -> {
-                InterfaceJuego(jugador,
-                    imageResourceId = R.drawable.lamorratheme,
-                    contentDescriptionId = R.string.welcome,
-                    onImageClick = {
-                        currentStep = 4
-                        soundPool.play(soundId, 1f, 1f, 0, 0, 1f)},
-                    ganador = ganador,
-                    onWinnerChange = {
-                        ganador = it
-                        soundPool.play(soundId, 1f, 1f, 0, 0, 1f)}
-                )
+                    )
+                }
+                3 -> {
+                    InterfaceJuego(
+                        jugador,
+                        imageResourceId = R.drawable.lamorratheme,
+                        contentDescriptionId = R.string.welcome,
+                        onImageClick = {
+                            currentStep = 4
+                            soundPool.play(soundId, 1f, 1f, 0, 0, 1f)
+                                       },
+                        ganador = ganador,
+                        onWinnerChange = {
+                            ganador = it
+                            soundPool.play(soundId, 1f, 1f, 0, 0, 1f)
+                        }
+                    )
+                }
 
-            }
-            4 -> {
-                PantallaFinal(jugador,
-                    imageResourceId = R.drawable.lamorratheme,
-                    contentDescriptionId = R.string.welcome,
-                    onImageClick = {
-                        currentStep = 2
-                        soundPool2.play(soundId2, 1f, 1f, 0, 0, 1f)},
-                    ganador = ganador
-                )
+                4 -> {
+                    PantallaFinal(
+                        jugador,
+                        imageResourceId = R.drawable.lamorratheme,
+                        contentDescriptionId = R.string.welcome,
+                        onImageClick = {
+                            currentStep = 2
+                            soundPool2.play(soundId2, 1f, 1f, 0, 0, 1f)
+                                       },
+                        ganador = ganador
+                    )
+                }
             }
         }
     }
+
 }
 
 @Composable
@@ -878,8 +906,78 @@ fun PantallaFinal(jugador: Jugador,
     )
 }
 
+class AyudaController {
+    var mostrarAyuda by mutableStateOf(false)
+        private set
+
+    fun mostrar() {
+        mostrarAyuda = true
+    }
+
+    fun ocultar() {
+        mostrarAyuda = false
+    }
+}
+
+val LocalAyudaController = compositionLocalOf { AyudaController() }
+
+@Composable
+fun ConAyudaOverlay(content: @Composable () -> Unit) {
+    val ayudaController = remember { AyudaController() }
+
+    CompositionLocalProvider(
+        LocalAyudaController provides ayudaController,
+        LocalToolbarActions provides ToolbarActions(
+            onHelp = { ayudaController.mostrar() },
+            onHome = { /* acción de inicio si quieres */ }
+        )
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            content()
+
+            if (ayudaController.mostrarAyuda) {
+                BackHandler(enabled = true) {
+                    ayudaController.ocultar()
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.5f))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.White)
+                    ) {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.primary)
+                                .padding(8.dp),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            IconButton(onClick = { ayudaController.ocultar() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Cerrar ayuda", tint = Color.White)
+                            }
+                        }
+
+                        HelpSection("file:///android_asset/ayuda.html")
+                    }
+                }
+            }
+        }
+    }
+}
+
+
 @Composable
 fun Toolbar(jugador: Jugador){
+
+    var expanded by remember { mutableStateOf(false) }
+    val actions = LocalToolbarActions.current
+
     TopAppBar(
         title = { Text("La Morra Virtual") },
         navigationIcon = {
@@ -889,8 +987,27 @@ fun Toolbar(jugador: Jugador){
         },
         actions = {
             Monedasyrachas(jugador)
-            IconButton(onClick = { /* Acción de más opciones */ }) {
+            IconButton(onClick = { expanded = true }) {
                 Icon(Icons.Default.MoreVert, contentDescription = "Más opciones")
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Ayuda") },
+                    onClick = {
+                        expanded = false
+                        actions.onHelp()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Inicio") },
+                    onClick = {
+                        expanded = false
+                        actions.onHome()
+                    }
+                )
             }
         },
         modifier = Modifier.fillMaxWidth(),
@@ -898,6 +1015,17 @@ fun Toolbar(jugador: Jugador){
     )
 }
 
+
+@Composable
+fun HelpSection(url: String) {
+    AndroidView(factory = { context ->
+        WebView(context).apply {
+            webViewClient = WebViewClient() // Evita abrir navegador externo
+            settings.javaScriptEnabled = true
+            loadUrl(url)
+        }
+    })
+}
 
 @Composable
 fun Monedasyrachas(jugador: Jugador){
