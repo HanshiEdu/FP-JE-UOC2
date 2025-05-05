@@ -11,6 +11,7 @@ composeBom = "2024.09.00"
 rxandroid = "3.0.0"
 rxkotlin = "3.0.1"
 rxjava = "3.1.6"
+google_play_services_location = "21.0.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -30,6 +31,7 @@ androidx-material3 = { group = "androidx.compose.material3", name = "material3" 
 rxandroid = { module = "io.reactivex.rxjava3:rxandroid", version.ref = "rxandroid" }
 rxkotlin = { module = "io.reactivex.rxjava3:rxkotlin", version.ref = "rxkotlin" }
 rxjava = { module = "io.reactivex.rxjava3:rxjava", version.ref = "rxjava" }
+play-services-location = { module = "com.google.android.gms:play-services-location", version.ref = "google_play_services_location" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

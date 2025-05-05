@@ -14,6 +14,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.icu.util.Calendar
 import android.icu.util.TimeZone
+import android.location.Location
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.os.Build
@@ -85,6 +86,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
@@ -99,13 +102,16 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.delay
 
 data class Jugador(
     val title: String,
     var monedas: Int,
     var rachas: Int,
-    var fecha: LocalDateTime? = null
+    var fecha: LocalDateTime? = null,
+    var latitud: Double,
+    var longitud: Double
 )
 
 data class ToolbarActions(
@@ -330,8 +336,41 @@ class CaptureController {
         requestCapture = true
     }
 }
+@Composable
+fun SolicitarPermisoUbicacion(onPermisoConcedido: () -> Unit) {
+    val contexto = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { concedido ->
+            if (concedido) {
+                onPermisoConcedido()
+            } else {
+                Toast.makeText(contexto, "Permiso denegado", Toast.LENGTH_SHORT).show()
+            }
+        }
+    )
 
+    LaunchedEffect(Unit) {
+        launcher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+}
+fun obtenerUbicacion(context: Context, onUbicacionObtenida: (Location?) -> Unit) {
+    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+    if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
 
+        fusedLocationClient.lastLocation
+            .addOnSuccessListener { location: Location? ->
+                if (location != null) {
+                    Log.d("debugubicacion", "Ubicación obtenida: Lat=${location.latitude}, Lng=${location.longitude}")
+                } else {
+                    Log.d("debugubicacion", "Ubicación es null")
+                }
+                onUbicacionObtenida(location)
+            }
+    } else {
+        onUbicacionObtenida(null)
+    }
+}
 @Composable
 fun CaptureComposable(
     captureController: CaptureController,
@@ -535,12 +574,22 @@ fun InterfaceJuego(jugador: Jugador,
                                         if (puntos1 >= 5) {
                                             // racha + 1
                                             jugador.rachas += 1
-                                            Toast.makeText(context, "fin de la partida ganador jugador", Toast.LENGTH_SHORT).show()
-                                            guardaPartidaDB(db ,jugador.title , jugador.monedas, jugador.rachas)
+
                                             if(activity != null) {
                                                 captureController.capture()
                                                 solicitarPermisosCalendario(activity)
                                                 mostrarElegirCalendario = true
+                                            }
+                                            obtenerUbicacion(context) { location ->
+                                                location?.let {
+                                                    // Guardamos latitud y longitud en la base de datos
+                                                    jugador.latitud = location.latitude
+                                                    jugador.longitud = location.longitude
+                                                }
+                                                guardaPartidaDB(db ,jugador.title , jugador.monedas, jugador.rachas, jugador.latitud, jugador.longitud)
+                                                Toast.makeText(context, "fin de la partida, ganador jugador Nombre=$jugador.title, Pasta=${jugador.monedas}, Racha=${jugador.rachas}, Posicionamiento={ ${jugador.latitud}, ${jugador.longitud}}", Toast.LENGTH_SHORT).show()
+                                                Log.d("victoriadebug","fin de la partida ganador jugador Nombre=$jugador.title, Pasta=$jugador.monedas, Racha=$jugador.rachas, Posicionamiento= $jugador.latitud, $jugador.longitud")
+
                                             }
                                         } else if (puntos2 >= 5) {
                                             // se acabo la racha
@@ -548,7 +597,6 @@ fun InterfaceJuego(jugador: Jugador,
                                             Toast.makeText(context, "fin de la partida ganadora la maquina", Toast.LENGTH_SHORT).show()
                                             // guardo la partida
                                             guardaPartidaDB(db ,jugador.title , jugador.monedas, jugador.rachas)
-
                                             onWinnerChange("Maquina")
                                             onImageClick.invoke()
                                         }
@@ -693,21 +741,30 @@ fun ElegirCalendario(
 }
 
 fun solicitarPermisosCalendario(activity: Activity) {
+    val permisosFaltantes = mutableListOf<String>()
+
     if (ContextCompat.checkSelfPermission(activity, android.Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED ||
         ContextCompat.checkSelfPermission(activity, android.Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+        permisosFaltantes.add(android.Manifest.permission.WRITE_CALENDAR)
+        permisosFaltantes.add(Manifest.permission.READ_CALENDAR)
+    }
 
+    if (ContextCompat.checkSelfPermission(activity, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(activity, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        permisosFaltantes.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
+        permisosFaltantes.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+    }
+
+    if (permisosFaltantes.isNotEmpty()){
         ActivityCompat.requestPermissions(
             activity,
-            arrayOf(
-                android.Manifest.permission.WRITE_CALENDAR,
-                Manifest.permission.READ_CALENDAR
-            ),
+            permisosFaltantes.toTypedArray(),
             100 // código de solicitud
         )
     }
 }
 
-fun agregarVictoriaCalendario(context: Context, calendarId: Long,titulo: String = "¡Victoria en el juego!", descripcion: String = "Ganaste una partida") {
+fun agregarVictoriaCalendario(context: Context, calendarId: Long,titulo: String = "¡Victoria en el juego LA MORRA!", descripcion: String = "Ganaste una partida") {
     // val calendarId = obtenerPrimerCalendarioId(context) ?: return
 
     Log.d("CaptureDebug", "Estas en la funcion agregarvictoriacalendario")
@@ -740,10 +797,10 @@ fun agregarVictoriaCalendario(context: Context, calendarId: Long,titulo: String 
 }
 
 
-fun guardaPartidaDB(dbpartida: SQLiteDatabase, nombre: String, monedas: Int, rachas: Int){
+fun guardaPartidaDB(dbpartida: SQLiteDatabase, nombre: String, monedas: Int, rachas: Int, latitud: Double = 0.0, longitud: Double = 0.0){
 
     val disposable = CompositeDisposable()
-    disposable.add( guardarPartida(dbpartida ,nombre , monedas, rachas)
+    disposable.add( guardarPartida(dbpartida ,nombre , monedas, rachas, latitud, longitud)
         .subscribeOn(Schedulers.io())
         .observeOn(AndroidSchedulers.mainThread())
         .subscribe(
@@ -1068,7 +1125,7 @@ fun Apostar(){
 @Preview(showBackground = true)
 @Composable
 fun DefaultPreview() {
-    val nombre = Jugador("javier", 30, 4)
+    val nombre = Jugador("javier", 30, 4, null, 0.0, 0.0)
     EjemploToolbarTheme {
         MorraVirtualApp(nombre)
     }
