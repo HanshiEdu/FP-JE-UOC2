@@ -332,8 +332,18 @@ class CaptureController {
     var bitmap: Bitmap? by mutableStateOf(null)
     var requestCapture by mutableStateOf(false)
 
-    fun capture() {
+    private var onCapturedCallback: ((Bitmap) -> Unit)? = null
+
+    fun capture(onCaptured: (Bitmap) -> Unit) {
+
+        onCapturedCallback = onCaptured
         requestCapture = true
+    }
+
+    fun onCaptured(bitmap: Bitmap) {
+        this.bitmap = bitmap
+        onCapturedCallback?.invoke(bitmap)
+        onCapturedCallback = null // evitar múltiples llamadas
     }
 }
 @Composable
@@ -408,7 +418,29 @@ fun CaptureComposable(
 
 }
 
-
+@Composable
+fun DialogoGuardarImagen(
+    context: Context,
+    bitmap: Bitmap,
+    onGuardar: (Bitmap) -> Unit,
+    onCancelar: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { onCancelar() },
+        title = { Text("Guardar imagen") },
+        text = { Text("¿Quieres guardar la imagen de la victoria en la galería?") },
+        confirmButton = {
+            TextButton(onClick = { onGuardar(bitmap) }) {
+                Text("Guardar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { onCancelar() }) {
+                Text("Cancelar")
+            }
+        }
+    )
+}
 
 @Composable
 fun InterfaceJuego(jugador: Jugador,
@@ -430,14 +462,15 @@ fun InterfaceJuego(jugador: Jugador,
     var capturaPendiente by remember { mutableStateOf(false) }
     var mostrarElegirCalendario by remember { mutableStateOf(false) }
     var calendarIdSeleccionado by remember { mutableStateOf<Long?>(null) }
+    var mostrarDialogoGuardarImagen by remember { mutableStateOf(false) }
+    var bitmapPendienteGuardar by remember { mutableStateOf<Bitmap?>(null) }
     // Activa el estado de captura antes de mostrar la pantalla final
     // Componente de captura
     CaptureComposable(
         captureController = captureController,
         onCaptured = { bitmap ->
-            guardarImagenEnGaleria(context, bitmap)
-            Toast.makeText(context, "Imagen guardada en galería", Toast.LENGTH_SHORT).show()
-            onCapturaLista(bitmap)
+            bitmapPendienteGuardar = bitmap
+            mostrarDialogoGuardarImagen = true
         }
     ) {
         Scaffold(
@@ -576,7 +609,10 @@ fun InterfaceJuego(jugador: Jugador,
                                             jugador.rachas += 1
 
                                             if(activity != null) {
-                                                captureController.capture()
+                                                captureController.capture { bitmap ->
+                                                    bitmapPendienteGuardar = bitmap
+                                                    mostrarDialogoGuardarImagen = true
+                                                }
                                                 solicitarPermisosCalendario(activity)
                                                 mostrarElegirCalendario = true
                                             }
@@ -645,17 +681,41 @@ fun InterfaceJuego(jugador: Jugador,
         )
     }
 
+    if (mostrarDialogoGuardarImagen && bitmapPendienteGuardar != null) {
+
+        Log.d("debugguardarimagen","llamo a la funcion dialogoguardarimagen 1")
+        DialogoGuardarImagen(
+            context,
+            bitmap = bitmapPendienteGuardar!!,
+            onGuardar = {
+                mostrarDialogoGuardarImagen = false
+                bitmapPendienteGuardar = null
+                guardarImagenEnGaleria(context, it)
+            },
+            onCancelar = {
+
+                Log.d("debugguardarimagen","llamo a la funcion dialogoguardarimagen 3")
+                mostrarDialogoGuardarImagen = false
+                bitmapPendienteGuardar = null
+            }
+        )
+    }
     // Llamamos a capture después de que se renderiza la UI
     LaunchedEffect(capturaPendiente) {
         if (capturaPendiente) {
             delay(300) // Espera un frame para la renderización
             // Realiza la captura
-            captureController.capture()
+            captureController.capture { bitmap ->
+                bitmapPendienteGuardar = bitmap
+                mostrarDialogoGuardarImagen = true
+            }
             // Llamada final a la UI
             onWinnerChange.invoke("Jugador")
             onImageClick.invoke()
         }
     }
+
+
 }
 
 
