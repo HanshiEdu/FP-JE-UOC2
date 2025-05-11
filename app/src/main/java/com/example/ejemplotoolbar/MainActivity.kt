@@ -105,6 +105,9 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.delay
 
+
+// creamos las clases que utilizaremos
+// Jugador para almacenar los datos del jugador
 data class Jugador(
     val title: String,
     var monedas: Int,
@@ -113,14 +116,38 @@ data class Jugador(
     var latitud: Double,
     var longitud: Double
 )
-
+// ToolbarActions para el desplegable de la barra de acción
 data class ToolbarActions(
     val onHelp: () -> Unit = {},
     val onHome: () -> Unit = {}
 )
-
+// variable global para controlar la barra de acción
 val LocalToolbarActions = compositionLocalOf { ToolbarActions() }
 
+// AyudaController para el manejo de la pagina de ayuda o webview
+class AyudaController {
+    var mostrarAyuda by mutableStateOf(false)
+        private set
+
+    fun mostrar() {
+        mostrarAyuda = true
+    }
+
+    fun ocultar() {
+        mostrarAyuda = false
+    }
+}
+// variable global para controlar la pagina de ayuda
+val LocalAyudaController = compositionLocalOf { AyudaController() }
+
+// CalendarioDisponible para almacenar la información de un calendario, no será de utilidad para hacer una lista de calendarios.
+data class CalendarioDisponible(
+    val id: Long,
+    val nombre: String,
+    val cuenta: String
+)
+
+// main, inicio de la activity ponemos en marcha la musica, las variables necesarias y la llamada al controlador de pantallas MorraVirtualApp
 class MainActivity : ComponentActivity() {
     private lateinit var mediaPlayer: MediaPlayer
 
@@ -164,6 +191,7 @@ class MainActivity : ComponentActivity() {
     }
 
 }
+// es una función de prueba para iniciar los datos de usuario
 @SuppressLint("CheckResult")
 @RequiresApi(Build.VERSION_CODES.O)
 fun IniciarDatos(context: Context): Jugador{
@@ -172,6 +200,7 @@ fun IniciarDatos(context: Context): Jugador{
     return  UltimaFila(db)
 }
 
+// controlador de pantallas
 @Composable
 fun MorraVirtualApp (jugador: Jugador) {
     var currentStep by remember { mutableIntStateOf(1) }
@@ -250,6 +279,7 @@ fun MorraVirtualApp (jugador: Jugador) {
 
 }
 
+// pantalla de inicio, solo aparece 1 vez
 @Composable
 fun MorraScreen(
     imageResourceId: Int,
@@ -286,7 +316,53 @@ fun MorraScreen(
         }
     }
 }
+// el resto de pantallas tienen en comunun topBar
 
+@Composable
+fun Toolbar(jugador: Jugador){
+
+    var expanded by remember { mutableStateOf(false) }
+    val actions = LocalToolbarActions.current
+
+    TopAppBar(
+        title = { Text("La Morra Virtual") },
+        navigationIcon = {
+            IconButton(onClick = { /* Acción de navegación */ }) {
+                Icon(Icons.Default.Menu, contentDescription = "Menú")
+            }
+        },
+        actions = {
+            Monedasyrachas(jugador)
+            IconButton(onClick = { expanded = true }) {
+                Icon(Icons.Default.MoreVert, contentDescription = "Más opciones")
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Ayuda") },
+                    onClick = {
+                        expanded = false
+                        actions.onHelp()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Inicio") },
+                    onClick = {
+                        expanded = false
+                        actions.onHome()
+                    }
+                )
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+        //elevation = 4.dp
+    )
+}
+
+
+// pantalla inicial donde podemos iniciar una partida
 @Composable
 fun InterfaceUsuario(jugador: Jugador,
     imageResourceId: Int,
@@ -327,121 +403,7 @@ fun InterfaceUsuario(jugador: Jugador,
         }
     )
 }
-
-class CaptureController {
-    var bitmap: Bitmap? by mutableStateOf(null)
-    var requestCapture by mutableStateOf(false)
-
-    private var onCapturedCallback: ((Bitmap) -> Unit)? = null
-
-    fun capture(onCaptured: (Bitmap) -> Unit) {
-
-        onCapturedCallback = onCaptured
-        requestCapture = true
-    }
-
-    fun onCaptured(bitmap: Bitmap) {
-        this.bitmap = bitmap
-        onCapturedCallback?.invoke(bitmap)
-        onCapturedCallback = null // evitar múltiples llamadas
-    }
-}
-@Composable
-fun SolicitarPermisoUbicacion(onPermisoConcedido: () -> Unit) {
-    val contexto = LocalContext.current
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = { concedido ->
-            if (concedido) {
-                onPermisoConcedido()
-            } else {
-                Toast.makeText(contexto, "Permiso denegado", Toast.LENGTH_SHORT).show()
-            }
-        }
-    )
-
-    LaunchedEffect(Unit) {
-        launcher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-    }
-}
-fun obtenerUbicacion(context: Context, onUbicacionObtenida: (Location?) -> Unit) {
-    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-    if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-
-        fusedLocationClient.lastLocation
-            .addOnSuccessListener { location: Location? ->
-                if (location != null) {
-                    Log.d("debugubicacion", "Ubicación obtenida: Lat=${location.latitude}, Lng=${location.longitude}")
-                } else {
-                    Log.d("debugubicacion", "Ubicación es null")
-                }
-                onUbicacionObtenida(location)
-            }
-    } else {
-        onUbicacionObtenida(null)
-    }
-}
-@Composable
-fun CaptureComposable(
-    captureController: CaptureController,
-    onCaptured: (Bitmap) -> Unit,
-    content: @Composable () -> Unit
-) {
-    Log.d("CaptureDebug", "entro en captureComposable")
-
-    AndroidView(
-        factory = { context ->
-            ComposeView(context).apply {
-                setContent {
-                    content()
-                }
-            }
-
-        },
-        update = { view ->
-            if (captureController.requestCapture) {
-                view.post {
-                    val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-                    val canvas = Canvas(bitmap)
-                    view.draw(canvas)
-                    Log.d("CaptureDebug", "Imagen capturada, tamaño: ${bitmap.width}x${bitmap.height}")
-                    captureController.bitmap = bitmap
-                    captureController.requestCapture = false
-                    onCaptured(bitmap)
-                }
-            }else{
-                Log.d("CaptureDebug", "entro en el else")
-            }
-        },
-        modifier = Modifier.fillMaxSize()
-    )
-
-}
-
-@Composable
-fun DialogoGuardarImagen(
-    context: Context,
-    bitmap: Bitmap,
-    onGuardar: (Bitmap) -> Unit,
-    onCancelar: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = { onCancelar() },
-        title = { Text("Guardar imagen") },
-        text = { Text("¿Quieres guardar la imagen de la victoria en la galería?") },
-        confirmButton = {
-            TextButton(onClick = { onGuardar(bitmap) }) {
-                Text("Guardar")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = { onCancelar() }) {
-                Text("Cancelar")
-            }
-        }
-    )
-}
-
+// en esta pantalla se lleva a cabo la partida
 @Composable
 fun InterfaceJuego(jugador: Jugador,
                     imageResourceId: Int,
@@ -718,181 +680,55 @@ fun InterfaceJuego(jugador: Jugador,
 
 }
 
-
-
-data class CalendarioDisponible(
-    val id: Long,
-    val nombre: String,
-    val cuenta: String
-)
-
-fun obtenerCalendarios(context: Context): List<CalendarioDisponible> {
-    val calendarios = mutableListOf<CalendarioDisponible>()
-
-    val projection = arrayOf(
-        CalendarContract.Calendars._ID,
-        CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
-        CalendarContract.Calendars.ACCOUNT_NAME
-    )
-
-    val cursor = context.contentResolver.query(
-        CalendarContract.Calendars.CONTENT_URI,
-        projection,
-        null,
-        null,
-        null
-    )
-
-    cursor?.use {
-        val idIndex = it.getColumnIndex(CalendarContract.Calendars._ID)
-        val nameIndex = it.getColumnIndex(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME)
-        val accountIndex = it.getColumnIndex(CalendarContract.Calendars.ACCOUNT_NAME)
-
-        while (it.moveToNext()) {
-            val id = it.getLong(idIndex)
-            val nombre = it.getString(nameIndex)
-            val cuenta = it.getString(accountIndex)
-
-            Log.d("CalendarioDebug", "Calendario encontrado: Nombre=$nombre, Cuenta=$cuenta, ID=$id")
-
-            calendarios.add(CalendarioDisponible(id, nombre, cuenta))
-        }
-    }
-
-    return calendarios
-}
-
+// pantalla final de partida
 @Composable
-fun ElegirCalendario(
-    onDismiss: () -> Unit,
-    onCalendarioSeleccionado: (Long) -> Unit
-) {
-    val context = LocalContext.current
-    val calendarios = remember { obtenerCalendarios(context).filter { calendario ->
-        calendario.cuenta.contains("@uoc.edu")
-    } }
+fun PantallaFinal(jugador: Jugador,
+                  ganador: String,
+                  imageResourceId: Int,
+                  contentDescriptionId: Int,
+                  onImageClick: () -> Unit,
+                  modifier: Modifier = Modifier) {
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {Text("Selecciona un calendario")},
-        text= {
-            Column {
-                calendarios.forEach { calendario ->
+    Scaffold(
+        topBar = { Toolbar(jugador)},
+        content = { innerPadding ->
+
+            Box(modifier) {
+                Image(
+                    painter = painterResource(imageResourceId),
+                    contentDescription = stringResource(contentDescriptionId),
+                    contentScale = ContentScale.Crop
+                )
+                Column(
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                ) {
+                    Text(
+                        text = stringResource(R.string.ganador,ganador),
+                        style = MaterialTheme.typography.displaySmall
+                    )
+                    Spacer(modifier = Modifier.height(200.dp))
                     Button(
-                        onClick = {
-                            onCalendarioSeleccionado(calendario.id)
-                            onDismiss()
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
+                        onClick = onImageClick,
                     ) {
-                        Text(calendario.nombre)
+                        Text(
+                            text = stringResource(R.string.final_oartida),
+                            fontSize = (24.sp),
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar")
-            }
         }
     )
 }
 
-fun solicitarPermisosCalendario(activity: Activity) {
-    val permisosFaltantes = mutableListOf<String>()
-
-    if (ContextCompat.checkSelfPermission(activity, android.Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED ||
-        ContextCompat.checkSelfPermission(activity, android.Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
-        permisosFaltantes.add(android.Manifest.permission.WRITE_CALENDAR)
-        permisosFaltantes.add(Manifest.permission.READ_CALENDAR)
-    }
-
-    if (ContextCompat.checkSelfPermission(activity, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ||
-        ContextCompat.checkSelfPermission(activity, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-        permisosFaltantes.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
-        permisosFaltantes.add(Manifest.permission.ACCESS_COARSE_LOCATION)
-    }
-
-    if (permisosFaltantes.isNotEmpty()){
-        ActivityCompat.requestPermissions(
-            activity,
-            permisosFaltantes.toTypedArray(),
-            100 // código de solicitud
-        )
-    }
-}
-
-fun agregarVictoriaCalendario(context: Context, calendarId: Long,titulo: String = "¡Victoria en el juego LA MORRA!", descripcion: String = "Ganaste una partida") {
-    // val calendarId = obtenerPrimerCalendarioId(context) ?: return
-
-    Log.d("CaptureDebug", "Estas en la funcion agregarvictoriacalendario")
-    val inicio = Calendar.getInstance()
-    val fin = Calendar.getInstance().apply{add(Calendar.HOUR, 1)}
-    //fin.add(Calendar.HOUR, 1) // duración de 1 hora
-
-    val values = ContentValues().apply {
-        put(CalendarContract.Events.DTSTART, inicio.timeInMillis)
-        put(CalendarContract.Events.DTEND, fin.timeInMillis)
-        put(CalendarContract.Events.TITLE, titulo)
-        put(CalendarContract.Events.DESCRIPTION, descripcion)
-        put(CalendarContract.Events.CALENDAR_ID, calendarId)
-        put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
-    }
-
-    try {
-        val uri = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
-        if (uri != null) {
-            Log.d("CALENDARIO", "Evento cuardado correctamente: $uri")
-            Log.d("CaptureDebug", "Insertando evento en calendario ID: $calendarId")
-        }else{
-            Log.d("CALENDARIO", "Error al guardar el evento")
-        }
-    }catch ( e: SecurityException){
-        Log.e("CaptureDebug", "Error de permisos al guardar evento: ${e.message}")
-    }catch (e: Exception) {
-        Log.e("CaptureDebug", "Error desconocido al guardar evento: ${e.message}")
-    }
-}
 
 
-fun guardaPartidaDB(dbpartida: SQLiteDatabase, nombre: String, monedas: Int, rachas: Int, latitud: Double = 0.0, longitud: Double = 0.0){
-
-    val disposable = CompositeDisposable()
-    disposable.add( guardarPartida(dbpartida ,nombre , monedas, rachas, latitud, longitud)
-        .subscribeOn(Schedulers.io())
-        .observeOn(AndroidSchedulers.mainThread())
-        .subscribe(
-            { rowId -> Log.d("DB", "Insertado con ID: $rowId") },
-            { error -> Log.e("DB", "error", error)}
-        )
-    )
-}
-
-fun guardarImagenEnGaleria(context: Context, bitmap: Bitmap) {
-    val filename = "victoria_${System.currentTimeMillis()}.jpg"
-    val contentValues = ContentValues().apply {
-        put(MediaStore.Images.Media.DISPLAY_NAME, filename)
-        put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-        put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Morra")
-        put(MediaStore.Images.Media.IS_PENDING, 1)
-    }
-    val resolver = context.contentResolver
-    val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-
-    uri?.let {
-        resolver.openOutputStream(it)?.use { outputStream ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
-        }
-
-        contentValues.clear()
-        contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
-        resolver.update(uri, contentValues, null, null)
-    }
-
-}
-
+// Funciones para mostrar una imagen determinada -------------------------------------------------------------------
 
 @Composable
 fun ImagenMano(a: Int){
@@ -978,66 +814,218 @@ fun CincoImagen(){
     )
 }
 
+// función para mostrar el webview ----------------------------------------------------------------------------------
 @Composable
-fun PantallaFinal(jugador: Jugador,
-                  ganador: String,
-    imageResourceId: Int,
-    contentDescriptionId: Int,
-    onImageClick: () -> Unit,
-    modifier: Modifier = Modifier) {
+fun HelpSection(url: String) {
+    AndroidView(factory = { context ->
+        WebView(context).apply {
+            webViewClient = WebViewClient() // Evita abrir navegador externo
+            settings.javaScriptEnabled = true
+            loadUrl(url)
+        }
+    })
+}
 
-    Scaffold(
-        topBar = { Toolbar(jugador)},
-        content = { innerPadding ->
+// funcion para mostrar en el toolbar la información del jugador ------------------------------------------------------
+@Composable
+fun Monedasyrachas(jugador: Jugador){
+    IconButton(onClick = { /* Acción de búsqueda */ }) {
+        //Icon(Icons.Default.Search , contentDescription = "Buscar")
+        Image(
+            painter = painterResource(R.drawable.racha),
+            contentDescription = "Racha"
+        )
+    }
+    Text(text = "${jugador.rachas}")
+    IconButton(onClick = { /* Acción de búsqueda */ }) {
+        //Icon(Icons.Default.Search , contentDescription = "Buscar")
+        Image(
+            painter = painterResource(R.drawable.money),
+            contentDescription = "Monedas"
+        )
+    }
+    Text(text = "${jugador.monedas}")
+}
 
-            Box(modifier) {
-                Image(
-                    painter = painterResource(imageResourceId),
-                    contentDescription = stringResource(contentDescriptionId),
-                    contentScale = ContentScale.Crop
-                )
-                Column(
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                ) {
-                    Text(
-                        text = stringResource(R.string.ganador,ganador),
-                        style = MaterialTheme.typography.displaySmall
-                    )
-                    Spacer(modifier = Modifier.height(200.dp))
-                    Button(
-                        onClick = onImageClick,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.final_oartida),
-                            fontSize = (24.sp),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+
+@Preview(showBackground = true)
+@Composable
+fun DefaultPreview() {
+    val nombre = Jugador("javier", 30, 4, null, 0.0, 0.0)
+    EjemploToolbarTheme {
+        MorraVirtualApp(nombre)
+    }
+}
+
+// recoger datos de apuesta -----------------------------------------------------------------------------------------------------------
+@Composable
+fun EntradaDeDatos (
+    title: String,
+    text: String,
+    onValueChange: (String) -> Unit
+){
+    TextField(
+        value = text,
+        onValueChange = onValueChange,
+        label = {Text(text = title)},
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+    )
+}
+
+// musica ---------------------------------------------------------------------------------------------------------------------------
+fun positivoConv (a: Int): Int{
+    if (a < 0 ){
+        return a * (-1)
+    }else
+        return a
+}
+@Composable
+fun rememberSoundPool(): SoundPool {
+    val context = LocalContext.current
+    return remember {
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        SoundPool.Builder()
+            .setMaxStreams(1)
+            .setAudioAttributes(audioAttributes)
+            .build()
+    }
+}
+
+
+// geolocalización -------------------------------------------------------------------------------------------------------
+fun obtenerUbicacion(context: Context, onUbicacionObtenida: (Location?) -> Unit) {
+    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+    if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+
+        fusedLocationClient.lastLocation
+            .addOnSuccessListener { location: Location? ->
+                if (location != null) {
+                    Log.d("debugubicacion", "Ubicación obtenida: Lat=${location.latitude}, Lng=${location.longitude}")
+                } else {
+                    Log.d("debugubicacion", "Ubicación es null")
                 }
+                onUbicacionObtenida(location)
+            }
+    } else {
+        onUbicacionObtenida(null)
+    }
+}
+
+// guardar iamgen -----------------------------------------------------------------------------------------------------
+
+// captura de imagen
+class CaptureController {
+    var bitmap: Bitmap? by mutableStateOf(null)
+    var requestCapture by mutableStateOf(false)
+
+    private var onCapturedCallback: ((Bitmap) -> Unit)? = null
+
+    fun capture(onCaptured: (Bitmap) -> Unit) {
+
+        onCapturedCallback = onCaptured
+        requestCapture = true
+    }
+
+    fun onCaptured(bitmap: Bitmap) {
+        this.bitmap = bitmap
+        onCapturedCallback?.invoke(bitmap)
+        onCapturedCallback = null // evitar múltiples llamadas
+    }
+}
+
+@Composable
+fun CaptureComposable(
+    captureController: CaptureController,
+    onCaptured: (Bitmap) -> Unit,
+    content: @Composable () -> Unit
+) {
+    Log.d("CaptureDebug", "entro en captureComposable")
+
+    AndroidView(
+        factory = { context ->
+            ComposeView(context).apply {
+                setContent {
+                    content()
+                }
+            }
+
+        },
+        update = { view ->
+            if (captureController.requestCapture) {
+                view.post {
+                    val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(bitmap)
+                    view.draw(canvas)
+                    Log.d("CaptureDebug", "Imagen capturada, tamaño: ${bitmap.width}x${bitmap.height}")
+                    captureController.bitmap = bitmap
+                    captureController.requestCapture = false
+                    onCaptured(bitmap)
+                }
+            }else{
+                Log.d("CaptureDebug", "entro en el else")
+            }
+        },
+        modifier = Modifier.fillMaxSize()
+    )
+
+}
+
+
+// cuadro dialogo para guardar la imagen o cancelar
+@Composable
+fun DialogoGuardarImagen(
+    context: Context,
+    bitmap: Bitmap,
+    onGuardar: (Bitmap) -> Unit,
+    onCancelar: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { onCancelar() },
+        title = { Text("Guardar imagen") },
+        text = { Text("¿Quieres guardar la imagen de la victoria en la galería?") },
+        confirmButton = {
+            TextButton(onClick = { onGuardar(bitmap) }) {
+                Text("Guardar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { onCancelar() }) {
+                Text("Cancelar")
             }
         }
     )
 }
 
-class AyudaController {
-    var mostrarAyuda by mutableStateOf(false)
-        private set
 
-    fun mostrar() {
-        mostrarAyuda = true
+// guardar la imagen en la galeria dek juego
+fun guardarImagenEnGaleria(context: Context, bitmap: Bitmap) {
+    val filename = "victoria_${System.currentTimeMillis()}.jpg"
+    val contentValues = ContentValues().apply {
+        put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+        put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+        put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Morra")
+        put(MediaStore.Images.Media.IS_PENDING, 1)
+    }
+    val resolver = context.contentResolver
+    val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+
+    uri?.let {
+        resolver.openOutputStream(it)?.use { outputStream ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+        }
+
+        contentValues.clear()
+        contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
+        resolver.update(uri, contentValues, null, null)
     }
 
-    fun ocultar() {
-        mostrarAyuda = false
-    }
 }
 
-val LocalAyudaController = compositionLocalOf { AyudaController() }
 
+// para encapsular la aplicación y mostrar la ayuda ----------------------------------------------------------------------------
 @Composable
 fun ConAyudaOverlay(content: @Composable () -> Unit) {
     val ayudaController = remember { AyudaController() }
@@ -1088,140 +1076,151 @@ fun ConAyudaOverlay(content: @Composable () -> Unit) {
     }
 }
 
+// para guardar una partida ganada en un calendario --------------------------------------------------------------------------
 
-@Composable
-fun Toolbar(jugador: Jugador){
+// obtener calendarios .uoc.edu
+fun obtenerCalendarios(context: Context): List<CalendarioDisponible> {
+    val calendarios = mutableListOf<CalendarioDisponible>()
 
-    var expanded by remember { mutableStateOf(false) }
-    val actions = LocalToolbarActions.current
-
-    TopAppBar(
-        title = { Text("La Morra Virtual") },
-        navigationIcon = {
-            IconButton(onClick = { /* Acción de navegación */ }) {
-                Icon(Icons.Default.Menu, contentDescription = "Menú")
-            }
-        },
-        actions = {
-            Monedasyrachas(jugador)
-            IconButton(onClick = { expanded = true }) {
-                Icon(Icons.Default.MoreVert, contentDescription = "Más opciones")
-            }
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Ayuda") },
-                    onClick = {
-                        expanded = false
-                        actions.onHelp()
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("Inicio") },
-                    onClick = {
-                        expanded = false
-                        actions.onHome()
-                    }
-                )
-            }
-        },
-        modifier = Modifier.fillMaxWidth(),
-        //elevation = 4.dp
+    val projection = arrayOf(
+        CalendarContract.Calendars._ID,
+        CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
+        CalendarContract.Calendars.ACCOUNT_NAME
     )
-}
 
+    val cursor = context.contentResolver.query(
+        CalendarContract.Calendars.CONTENT_URI,
+        projection,
+        null,
+        null,
+        null
+    )
 
-@Composable
-fun HelpSection(url: String) {
-    AndroidView(factory = { context ->
-        WebView(context).apply {
-            webViewClient = WebViewClient() // Evita abrir navegador externo
-            settings.javaScriptEnabled = true
-            loadUrl(url)
+    cursor?.use {
+        val idIndex = it.getColumnIndex(CalendarContract.Calendars._ID)
+        val nameIndex = it.getColumnIndex(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME)
+        val accountIndex = it.getColumnIndex(CalendarContract.Calendars.ACCOUNT_NAME)
+
+        while (it.moveToNext()) {
+            val id = it.getLong(idIndex)
+            val nombre = it.getString(nameIndex)
+            val cuenta = it.getString(accountIndex)
+
+            Log.d("CalendarioDebug", "Calendario encontrado: Nombre=$nombre, Cuenta=$cuenta, ID=$id")
+
+            calendarios.add(CalendarioDisponible(id, nombre, cuenta))
         }
-    })
+    }
+
+    return calendarios
 }
 
+//elegir calendario
 @Composable
-fun Monedasyrachas(jugador: Jugador){
-    IconButton(onClick = { /* Acción de búsqueda */ }) {
-        //Icon(Icons.Default.Search , contentDescription = "Buscar")
-        Image(
-            painter = painterResource(R.drawable.racha),
-            contentDescription = "Racha"
+fun ElegirCalendario(
+    onDismiss: () -> Unit,
+    onCalendarioSeleccionado: (Long) -> Unit
+) {
+    val context = LocalContext.current
+    val calendarios = remember { obtenerCalendarios(context).filter { calendario ->
+        calendario.cuenta.contains("@uoc.edu")
+    } }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {Text("Selecciona un calendario")},
+        text= {
+            Column {
+                calendarios.forEach { calendario ->
+                    Button(
+                        onClick = {
+                            onCalendarioSeleccionado(calendario.id)
+                            onDismiss()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Text(calendario.nombre)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar")
+            }
+        }
+    )
+}
+// agregar la victoria en el calendario elegido
+fun agregarVictoriaCalendario(context: Context, calendarId: Long,titulo: String = "¡Victoria en el juego LA MORRA!", descripcion: String = "Ganaste una partida") {
+    // val calendarId = obtenerPrimerCalendarioId(context) ?: return
+
+    Log.d("CaptureDebug", "Estas en la funcion agregarvictoriacalendario")
+    val inicio = Calendar.getInstance()
+    val fin = Calendar.getInstance().apply{add(Calendar.HOUR, 1)}
+    //fin.add(Calendar.HOUR, 1) // duración de 1 hora
+
+    val values = ContentValues().apply {
+        put(CalendarContract.Events.DTSTART, inicio.timeInMillis)
+        put(CalendarContract.Events.DTEND, fin.timeInMillis)
+        put(CalendarContract.Events.TITLE, titulo)
+        put(CalendarContract.Events.DESCRIPTION, descripcion)
+        put(CalendarContract.Events.CALENDAR_ID, calendarId)
+        put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+    }
+
+    try {
+        val uri = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
+        if (uri != null) {
+            Log.d("CALENDARIO", "Evento cuardado correctamente: $uri")
+            Log.d("CaptureDebug", "Insertando evento en calendario ID: $calendarId")
+        }else{
+            Log.d("CALENDARIO", "Error al guardar el evento")
+        }
+    }catch ( e: SecurityException){
+        Log.e("CaptureDebug", "Error de permisos al guardar evento: ${e.message}")
+    }catch (e: Exception) {
+        Log.e("CaptureDebug", "Error desconocido al guardar evento: ${e.message}")
+    }
+}
+
+// guardar la partida en la base de datos ---------------------------------------------------------------------------------------------------------
+fun guardaPartidaDB(dbpartida: SQLiteDatabase, nombre: String, monedas: Int, rachas: Int, latitud: Double = 0.0, longitud: Double = 0.0){
+
+    val disposable = CompositeDisposable()
+    disposable.add( guardarPartida(dbpartida ,nombre , monedas, rachas, latitud, longitud)
+        .subscribeOn(Schedulers.io())
+        .observeOn(AndroidSchedulers.mainThread())
+        .subscribe(
+            { rowId -> Log.d("DB", "Insertado con ID: $rowId") },
+            { error -> Log.e("DB", "error", error)}
         )
-    }
-    Text(text = "${jugador.rachas}")
-    IconButton(onClick = { /* Acción de búsqueda */ }) {
-        //Icon(Icons.Default.Search , contentDescription = "Buscar")
-        Image(
-            painter = painterResource(R.drawable.money),
-            contentDescription = "Monedas"
-        )
-    }
-    Text(text = "${jugador.monedas}")
-}
-
-@Composable
-fun JuegoPartida(){
-    Box(Modifier
-        .fillMaxSize()
-        .padding(16.dp)){
-        Apostar()
-
-    }
-}
-
-@Composable
-fun Apostar(){
-    Row {
-        Text("prueba1")
-
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun DefaultPreview() {
-    val nombre = Jugador("javier", 30, 4, null, 0.0, 0.0)
-    EjemploToolbarTheme {
-        MorraVirtualApp(nombre)
-    }
-}
-
-@Composable
-fun EntradaDeDatos (
-    title: String,
-    text: String,
-    onValueChange: (String) -> Unit
-){
-    TextField(
-        value = text,
-        onValueChange = onValueChange,
-        label = {Text(text = title)},
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
     )
 }
 
-fun positivoConv (a: Int): Int{
-    if (a < 0 ){
-        return a * (-1)
-    }else
-        return a
-}
-@Composable
-fun rememberSoundPool(): SoundPool {
-    val context = LocalContext.current
-    return remember {
-        val audioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
-        SoundPool.Builder()
-            .setMaxStreams(1)
-            .setAudioAttributes(audioAttributes)
-            .build()
+// permisos de la aplicación, aprovechando la función para el calendario tambien pediremos la de localizacion -----------------------------------------------
+fun solicitarPermisosCalendario(activity: Activity) {
+    val permisosFaltantes = mutableListOf<String>()
+
+    if (ContextCompat.checkSelfPermission(activity, android.Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(activity, android.Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+        permisosFaltantes.add(android.Manifest.permission.WRITE_CALENDAR)
+        permisosFaltantes.add(Manifest.permission.READ_CALENDAR)
+    }
+
+    if (ContextCompat.checkSelfPermission(activity, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(activity, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        permisosFaltantes.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
+        permisosFaltantes.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+    }
+
+    if (permisosFaltantes.isNotEmpty()){
+        ActivityCompat.requestPermissions(
+            activity,
+            permisosFaltantes.toTypedArray(),
+            100 // código de solicitud
+        )
     }
 }
