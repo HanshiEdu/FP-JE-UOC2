@@ -1264,6 +1264,7 @@ fun solicitarPermisosCalendario(activity: Activity) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
         ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
         permisosFaltantes.add(Manifest.permission.POST_NOTIFICATIONS)
+
     }
 
     if (permisosFaltantes.isNotEmpty()) {
