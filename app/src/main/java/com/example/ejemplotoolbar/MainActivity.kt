@@ -6,6 +6,8 @@ package com.example.ejemplotoolbar
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.pm.PackageManager
@@ -101,6 +103,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.delay
@@ -194,6 +198,7 @@ class MainActivity : ComponentActivity() {
 // es una función de prueba para iniciar los datos de usuario
 @SuppressLint("CheckResult")
 @RequiresApi(Build.VERSION_CODES.O)
+
 fun IniciarDatos(context: Context): Jugador{
     val dbHelper = DataPartida(context)
     var db = dbHelper.writableDatabase
@@ -428,6 +433,10 @@ fun InterfaceJuego(jugador: Jugador,
     var bitmapPendienteGuardar by remember { mutableStateOf<Bitmap?>(null) }
     // Activa el estado de captura antes de mostrar la pantalla final
     // Componente de captura
+
+    LaunchedEffect(Unit) {
+        crearCanalDeNotificacion(context)
+    }
     CaptureComposable(
         captureController = captureController,
         onCaptured = { bitmap ->
@@ -589,6 +598,7 @@ fun InterfaceJuego(jugador: Jugador,
                                                 Log.d("victoriadebug","fin de la partida ganador jugador Nombre=$jugador.title, Pasta=$jugador.monedas, Racha=$jugador.rachas, Posicionamiento= $jugador.latitud, $jugador.longitud")
 
                                             }
+                                            emitirNotificacionVictoria(context)
                                         } else if (puntos2 >= 5) {
                                             // se acabo la racha
                                             jugador.rachas = 0
@@ -1026,6 +1036,8 @@ fun guardarImagenEnGaleria(context: Context, bitmap: Bitmap) {
 
 
 // para encapsular la aplicación y mostrar la ayuda ----------------------------------------------------------------------------
+
+
 @Composable
 fun ConAyudaOverlay(content: @Composable () -> Unit) {
     val ayudaController = remember { AyudaController() }
@@ -1201,7 +1213,7 @@ fun guardaPartidaDB(dbpartida: SQLiteDatabase, nombre: String, monedas: Int, rac
 }
 
 // permisos de la aplicación, aprovechando la función para el calendario tambien pediremos la de localizacion -----------------------------------------------
-fun solicitarPermisosCalendario(activity: Activity) {
+/*fun solicitarPermisosCalendario(activity: Activity) {
     val permisosFaltantes = mutableListOf<String>()
 
     if (ContextCompat.checkSelfPermission(activity, android.Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED ||
@@ -1216,6 +1228,14 @@ fun solicitarPermisosCalendario(activity: Activity) {
         permisosFaltantes.add(Manifest.permission.ACCESS_COARSE_LOCATION)
     }
 
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        ActivityCompat.requestPermissions(
+            activity,
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            1001
+        )
+    }
+
     if (permisosFaltantes.isNotEmpty()){
         ActivityCompat.requestPermissions(
             activity,
@@ -1224,3 +1244,75 @@ fun solicitarPermisosCalendario(activity: Activity) {
         )
     }
 }
+*/
+fun solicitarPermisosCalendario(activity: Activity) {
+    val permisosFaltantes = mutableSetOf<String>() // Set para evitar duplicados
+
+    if (ContextCompat.checkSelfPermission(activity, Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+        permisosFaltantes.add(Manifest.permission.WRITE_CALENDAR)
+    }
+    if (ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+        permisosFaltantes.add(Manifest.permission.READ_CALENDAR)
+    }
+    if (ContextCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        permisosFaltantes.add(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+    if (ContextCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        permisosFaltantes.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+    }
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+        permisosFaltantes.add(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    if (permisosFaltantes.isNotEmpty()) {
+        ActivityCompat.requestPermissions(
+            activity,
+            permisosFaltantes.toTypedArray(),
+            100 // Código de solicitud general
+        )
+    }
+}
+// Notificaciones ---------------------------------------------------------------------------------------------------------------------------------------
+
+// abrir canal
+fun crearCanalDeNotificacion(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val canal = NotificationChannel(
+            "victoria_id", // ID del canal
+            "Victorias",   // Nombre visible
+            NotificationManager.IMPORTANCE_DEFAULT
+        ).apply {
+            description = "Notificaciones de victoria"
+        }
+
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.createNotificationChannel(canal)
+    }
+}
+
+// emitir notificacion
+
+fun emitirNotificacionVictoria(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+        != PackageManager.PERMISSION_GRANTED
+    ) {
+        // No tienes permiso para notificaciones. Puedes omitir o pedirlo en otra parte.
+        Log.w("Notificacion", "Permiso de notificaciones no concedido.")
+        return
+    }
+
+    val builder = NotificationCompat.Builder(context, "victoria_id")
+        .setSmallIcon(R.drawable.ic_launcher_foreground) // Usa tu ícono
+        .setContentTitle("¡Victoria!")
+        .setContentText("Has ganado una partida. ¡Felicidades" +
+                "" +
+                "!")
+        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+
+    val manager = NotificationManagerCompat.from(context)
+    manager.notify(1, builder.build())
+}
+
