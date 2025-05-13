@@ -61,5 +61,6 @@ dependencies {
     implementation(libs.rxkotlin)
     implementation(libs.rxandroid)
     implementation(libs.rxjava)
+    implementation(libs.play.services.location)
 
 }
