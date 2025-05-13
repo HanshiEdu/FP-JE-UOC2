@@ -81,6 +81,7 @@ import io.reactivex.rxjava3.schedulers.Schedulers
 import java.io.IOException
 import java.time.LocalDateTime
 import android.media.SoundPool
+
 import android.os.Environment
 import android.provider.CalendarContract
 import android.provider.MediaStore
@@ -108,10 +109,9 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.delay
+import androidx.compose.runtime.DisposableEffect
 
 
-// creamos las clases que utilizaremos
-// Jugador para almacenar los datos del jugador
 data class Jugador(
     val title: String,
     var monedas: Int,
@@ -216,6 +216,7 @@ fun MorraVirtualApp (jugador: Jugador) {
     val context = LocalContext.current
     val soundId = remember { soundPool.load(context, R.raw.button, 1) }
     val soundId2 = remember { soundPool2.load(context, R.raw.winner, 1) }
+
     val loaded = remember { mutableStateOf(false) }
     ConAyudaOverlay {
         Surface(
@@ -246,38 +247,33 @@ fun MorraVirtualApp (jugador: Jugador) {
                         onImageClick = {
                         currentStep = 3
                         soundPool.play(soundId, 1f, 1f, 0, 0, 1f)
-                        }
-                    )
-                }
-                3 -> {
-                    InterfaceJuego(
-                        jugador,
-                        imageResourceId = R.drawable.lamorratheme,
-                        contentDescriptionId = R.string.welcome,
-                        onImageClick = {
-                            currentStep = 4
-                            soundPool.play(soundId, 1f, 1f, 0, 0, 1f)
-                                       },
-                        ganador = ganador,
-                        onWinnerChange = {
-                            ganador = it
-                            soundPool.play(soundId, 1f, 1f, 0, 0, 1f)
-                        }
-                    )
-                }
 
-                4 -> {
-                    PantallaFinal(
-                        jugador,
-                        imageResourceId = R.drawable.lamorratheme,
-                        contentDescriptionId = R.string.welcome,
-                        onImageClick = {
-                            currentStep = 2
-                            soundPool2.play(soundId2, 1f, 1f, 0, 0, 1f)
-                                       },
-                        ganador = ganador
-                    )
-                }
+                    }
+                )
+            }
+            3 -> {
+                InterfaceJuego(jugador,
+                    imageResourceId = R.drawable.lamorratheme,
+                    contentDescriptionId = R.string.welcome,
+                    onImageClick = {
+                        currentStep = 4
+                        soundPool.play(soundId, 1f, 1f, 0, 0, 1f)},
+                    ganador = ganador,
+                    onWinnerChange = {
+                        ganador = it
+                        soundPool2.play(soundId2, 1f, 1f, 0, 0, 1f)}
+                )
+
+            }
+            4 -> {
+                PantallaFinal(jugador,
+                    imageResourceId = R.drawable.lamorratheme,
+                    contentDescriptionId = R.string.welcome,
+                    onImageClick = {
+                        currentStep = 2
+                        soundPool.play(soundId, 1f, 1f, 0, 0, 1f)},
+                    ganador = ganador
+                )
             }
         }
     }
@@ -394,6 +390,8 @@ fun InterfaceUsuario(jugador: Jugador,
                     Spacer(modifier = Modifier.height(200.dp))
                     Button(
                         onClick = onImageClick,
+
+
                     ) {
                         Text(
                             text = stringResource(R.string.iniciar_juego),
