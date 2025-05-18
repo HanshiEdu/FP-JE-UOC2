@@ -1,3 +1,6 @@
+[bundles]
+firebase = ["firebase-auth", "firebase-firestore"]
+
 [versions]
 agp = "8.9.1"
 kotlin = "2.0.21"
@@ -12,6 +15,10 @@ rxandroid = "3.0.0"
 rxkotlin = "3.0.1"
 rxjava = "3.1.6"
 google_play_services_location = "21.0.1"
+firebase-bom = "32.7.1"
+firebase-auth = "22.3.1"
+firebase-firestore = "24.11.0"
+play-services-auth = "20.7.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -33,8 +40,12 @@ rxkotlin = { module = "io.reactivex.rxjava3:rxkotlin", version.ref = "rxkotlin" 
 rxjava = { module = "io.reactivex.rxjava3:rxjava", version.ref = "rxjava" }
 play-services-location = { module = "com.google.android.gms:play-services-location", version.ref = "google_play_services_location" }
 
+firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
+firebase-auth = { module = "com.google.firebase:firebase-auth-ktx", version.ref = "firebase-auth" }
+firebase-firestore = { module = "com.google.firebase:firebase-firestore-ktx", version.ref = "firebase-firestore" }
+play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "play-services-auth" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-

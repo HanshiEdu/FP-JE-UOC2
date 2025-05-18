@@ -233,47 +233,54 @@ fun MorraVirtualApp (jugador: Jugador) {
                         imageResourceId = R.drawable.lamorravirtual,
                         contentDescriptionId = R.string.welcome,
                         onImageClick = { currentStep = 2 },
-                        )
+                    )
                 }
 
 
                 2 -> {
-                //Thread.sleep(3000)
+                    //Thread.sleep(3000)
 
                     InterfaceUsuario(
                         jugador,
                         imageResourceId = R.drawable.lamorratheme,
                         contentDescriptionId = R.string.welcome,
                         onImageClick = {
-                        currentStep = 3
-                        soundPool.play(soundId, 1f, 1f, 0, 0, 1f)
+                            currentStep = 3
+                            soundPool.play(soundId, 1f, 1f, 0, 0, 1f)
+                        }
+                    )
+                }
 
-                    }
-                )
-            }
-            3 -> {
-                InterfaceJuego(jugador,
-                    imageResourceId = R.drawable.lamorratheme,
-                    contentDescriptionId = R.string.welcome,
-                    onImageClick = {
-                        currentStep = 4
-                        soundPool.play(soundId, 1f, 1f, 0, 0, 1f)},
-                    ganador = ganador,
-                    onWinnerChange = {
-                        ganador = it
-                        soundPool2.play(soundId2, 1f, 1f, 0, 0, 1f)}
-                )
+                3 -> {
+                    InterfaceJuego(
+                        jugador,
+                        imageResourceId = R.drawable.lamorratheme,
+                        contentDescriptionId = R.string.welcome,
+                        onImageClick = {
+                            currentStep = 4
+                            soundPool.play(soundId, 1f, 1f, 0, 0, 1f)
+                        },
+                        ganador = ganador,
+                        onWinnerChange = {
+                            ganador = it
+                            soundPool2.play(soundId2, 1f, 1f, 0, 0, 1f)
+                        }
+                    )
 
-            }
-            4 -> {
-                PantallaFinal(jugador,
-                    imageResourceId = R.drawable.lamorratheme,
-                    contentDescriptionId = R.string.welcome,
-                    onImageClick = {
-                        currentStep = 2
-                        soundPool.play(soundId, 1f, 1f, 0, 0, 1f)},
-                    ganador = ganador
-                )
+                }
+
+                4 -> {
+                    PantallaFinal(
+                        jugador,
+                        imageResourceId = R.drawable.lamorratheme,
+                        contentDescriptionId = R.string.welcome,
+                        onImageClick = {
+                            currentStep = 2
+                            soundPool.play(soundId, 1f, 1f, 0, 0, 1f)
+                        },
+                        ganador = ganador
+                    )
+                }
             }
         }
     }
