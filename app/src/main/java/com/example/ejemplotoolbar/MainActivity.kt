@@ -110,10 +110,17 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.DisposableEffect
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.auth
 
 
 data class Jugador(
-    val title: String,
+    var title: String,
     var monedas: Int,
     var rachas: Int,
     var fecha: LocalDateTime? = null,
@@ -157,6 +164,9 @@ class MainActivity : ComponentActivity() {
 
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
+        FirebaseApp.initializeApp(this)?.let {
+            Log.d("FirebaseInit", "FirebaseApp inicializado correctamente.")
+        } ?: Log.e("FirebaseInit", "Error: FirebaseApp es null")
         super.onCreate(savedInstanceState)
         var nombre = IniciarDatos(this)
         setContent {
@@ -232,7 +242,12 @@ fun MorraVirtualApp (jugador: Jugador) {
                     MorraScreen(
                         imageResourceId = R.drawable.lamorravirtual,
                         contentDescriptionId = R.string.welcome,
-                        onImageClick = { currentStep = 2 },
+                        onImageClick = { jugadorFromLogin ->
+                            jugador.title = jugadorFromLogin.title
+                            jugador.monedas = jugadorFromLogin.monedas
+                            currentStep = 2
+
+                        },
                     )
                 }
 
@@ -292,10 +307,30 @@ fun MorraVirtualApp (jugador: Jugador) {
 fun MorraScreen(
     imageResourceId: Int,
     contentDescriptionId: Int,
-    onImageClick: () -> Unit,
+    onImageClick: (Jugador) -> Unit,
     modifier: Modifier = Modifier
 
 ){
+    val context = LocalContext.current
+    var currentUser by remember { mutableStateOf(Firebase.auth.currentUser) }
+
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        try {
+            val account = task.getResult(ApiException::class.java)
+            val credential = GoogleAuthProvider.getCredential(account.idToken, null)
+            Firebase.auth.signInWithCredential(credential)
+                .addOnCompleteListener { authTask ->
+                    if (authTask.isSuccessful) {
+                        currentUser = Firebase.auth.currentUser
+                    }
+                }
+        } catch (e: ApiException) {
+            Log.e("Login", "Error al iniciar sesión con Google", e)
+        }
+    }
+
+    val token = stringResource(R.string.default_web_client_id)
     Box(modifier){
         Image(
             painter = painterResource(imageResourceId),
@@ -310,16 +345,36 @@ fun MorraScreen(
         ){
 
             Spacer(modifier = Modifier.height(540.dp))
-            Button( onClick = onImageClick,
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier
-                    .height(40.dp)
-                //.padding(30.dp)
-            ) {
-                Text(
-                    stringResource(R.string.clic_welcome)
+            if (currentUser == null) {
+                Button(
+                    onClick = {
+                        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                            .requestIdToken(token)
+                            .requestEmail()
+                            .build()
+                        val googleSignInClient = GoogleSignIn.getClient(context, gso)
+                        launcher.launch(googleSignInClient.signInIntent)
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.height(40.dp)
+                ) {
+                    Text("Iniciar sesión con Google")
+                }
+            }else {
+                // Usuario autenticado, crear objeto Jugador y continuar
+                val jugador = Jugador(
+                    title = currentUser?.displayName ?: "Jugador",
+                    monedas = 20,
+                    rachas = 0,
+                    fecha = null,
+                    latitud = 0.0,
+                    longitud = 0.0
                 )
+                LaunchedEffect(Unit) {
+                    onImageClick(jugador)
+                }
             }
+
 
         }
     }

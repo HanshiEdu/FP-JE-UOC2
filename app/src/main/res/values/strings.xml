@@ -9,6 +9,7 @@
     <string name="nueva_apuesta">APOSTAR.</string>
     <string name="ganador">El ganador es: %s</string>
     <string name="salir_partida">SALIR DE LA PARTIDA.</string>
+    <string name="default_web_client_id">199772280386-hrki8m6l9tjhm4g7ufffbs3jqlltv0ga.apps.googleusercontent.com</string>
 
 
 </resources>

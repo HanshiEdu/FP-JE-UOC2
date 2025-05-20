@@ -9,7 +9,7 @@ plugins {
     // Add the Google services Gradle plugin
     //
 //
-// id("com.google.gms.google-services")
+ id("com.google.gms.google-services")
     }
 
 android {
@@ -73,5 +73,6 @@ dependencies {
     implementation(platform(libs.firebase.bom)) // Bill of materials para Firebase
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
+    implementation(libs.play.services.auth)
     implementation(libs.play.services.auth)
 }
